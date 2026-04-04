@@ -1,0 +1,61 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "ES2022"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@aesthetic-track/domain": [
+        "../../packages/domain/src"
+      ],
+      "@aesthetic-track/domain/*": [
+        "../../packages/domain/src/*"
+      ],
+      "@aesthetic-track/application": [
+        "../../packages/application/src"
+      ],
+      "@aesthetic-track/application/*": [
+        "../../packages/application/src/*"
+      ],
+      "@aesthetic-track/infrastructure": [
+        "../../packages/infrastructure/src"
+      ],
+      "@aesthetic-track/infrastructure/*": [
+        "../../packages/infrastructure/src/*"
+      ],
+      "@aesthetic-track/shared": [
+        "../../packages/shared/src"
+      ],
+      "@aesthetic-track/shared/*": [
+        "../../packages/shared/src/*"
+      ]
+    },
+    "incremental": true,
+    "noEmit": true,
+    "allowJs": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

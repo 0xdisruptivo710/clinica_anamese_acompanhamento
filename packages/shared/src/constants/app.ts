@@ -1,0 +1,11 @@
+export const APP_CONSTANTS = {
+  APP_NAME: 'AestheticTrack',
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_UPLOAD_SIZE_MB: 10,
+  MAX_PHOTOS_PER_SESSION: 20,
+  PAIN_SCORE_MIN: 0,
+  PAIN_SCORE_MAX: 10,
+  MIN_PASSWORD_LENGTH: 8,
+  SESSION_COOKIE_NAME: 'sb-session',
+  STORAGE_BUCKET: 'aesthetic-photos',
+} as const;

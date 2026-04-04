@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@infrastructure/*": ["./src/*"],
+      "@aesthetic-track/domain": ["../domain/src"],
+      "@aesthetic-track/domain/*": ["../domain/src/*"],
+      "@aesthetic-track/application": ["../application/src"],
+      "@aesthetic-track/application/*": ["../application/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}
