@@ -33,12 +33,94 @@ git push -u origin main
 3. Preencha: nome do projeto, senha do banco, regiao (escolha a mais proxima da clinica)
 4. Aguarde a criacao (~2 minutos)
 
-### 2.1 Executar as Migrations
+### 2.1 Criar as Tabelas do Banco de Dados
 
-No Supabase Dashboard, va em **SQL Editor** e execute os arquivos na ordem:
+O banco de dados precisa ser criado do zero para cada nova clinica. Siga os passos:
 
-1. Abra `supabase/migrations/00001_full_schema.sql` — copie e execute
-2. Abra `supabase/migrations/00002_move_to_public_schema.sql` — copie e execute
+1. No Supabase Dashboard, va em **SQL Editor**
+2. Clique em **New Query**
+3. Copie **TODO** o conteudo do arquivo `supabase/migrations/00002_move_to_public_schema.sql` e cole no editor
+4. Clique em **Run** (ou Ctrl+Enter)
+5. Aguarde a mensagem de sucesso
+
+> **IMPORTANTE:** Execute SOMENTE o arquivo `00002_move_to_public_schema.sql`. O arquivo `00001` usa schemas separados e NAO e necessario. O `00002` ja cria tudo no schema `public` que e o que o app usa.
+
+#### Tabelas que serao criadas
+
+| Tabela | Descricao |
+|--------|-----------|
+| `clinics` | Dados da clinica (nome, CNPJ, telefone, endereco) |
+| `professionals` | Profissionais/usuarios vinculados a clinica |
+| `clients` | Clientes da clinica com anamnese completa |
+| `sessions` | Sessoes de atendimento (data, status, notas, valor) |
+| `session_procedures` | Procedimentos realizados em cada sessao |
+| `session_photos` | Fotos vinculadas as sessoes (antes/depois) |
+| `photo_comparisons` | Comparacoes antes/depois configuradas |
+| `products` | Catalogo de produtos/insumos da clinica |
+| `message_templates` | Templates de mensagens pos-sessao |
+| `client_messages` | Mensagens enviadas aos clientes (WhatsApp/email) |
+| `ai_generation_log` | Log de geracao de conteudo com IA |
+| `activity_log` | Auditoria de acoes no sistema |
+
+#### Verificar se as tabelas foram criadas
+
+Apos executar o SQL, va em **Table Editor** no menu lateral. Voce deve ver todas as tabelas listadas acima. Se alguma nao aparecer, execute o SQL novamente.
+
+#### Tipos (Enums) criados automaticamente
+
+O SQL tambem cria os seguintes tipos que sao usados nas tabelas:
+
+- `procedure_category` — tipos de procedimento (botox, preenchimento, laser, etc.)
+- `treatment_area` — areas do rosto e corpo (testa, queixo, abdomen, etc.)
+- `session_status` — status da sessao (agendada, em andamento, concluida, etc.)
+- `photo_type` — tipo de foto (antes, depois, durante, progresso)
+- `photo_angle` — angulo da foto (frontal, perfil esquerdo/direito, etc.)
+- `message_channel` — canal de envio (whatsapp, email, sms)
+- `message_status` — status da mensagem (pendente, enviada, entregue, lida)
+- `skin_type` — tipo de pele (normal, seca, oleosa, mista, sensivel)
+- `fitzpatrick_scale` — escala de Fitzpatrick (I a VI)
+
+#### Funcoes e Views criadas
+
+- `set_updated_at()` — atualiza automaticamente o campo `updated_at` em qualquer tabela
+- `set_session_number()` — numera automaticamente as sessoes por cliente (1a, 2a, 3a...)
+- `search_clients()` — busca de clientes por nome, telefone ou CPF
+- `client_evolution_summary` — view com resumo evolutivo de cada cliente
+
+#### Se precisar resetar o banco (CUIDADO: apaga todos os dados)
+
+```sql
+-- CUIDADO: isso apaga TUDO. Use apenas em ambiente de teste.
+DROP TABLE IF EXISTS activity_log CASCADE;
+DROP TABLE IF EXISTS ai_generation_log CASCADE;
+DROP TABLE IF EXISTS client_messages CASCADE;
+DROP TABLE IF EXISTS message_templates CASCADE;
+DROP TABLE IF EXISTS photo_comparisons CASCADE;
+DROP TABLE IF EXISTS session_photos CASCADE;
+DROP TABLE IF EXISTS session_procedures CASCADE;
+DROP TABLE IF EXISTS products CASCADE;
+DROP TABLE IF EXISTS sessions CASCADE;
+DROP TABLE IF EXISTS clients CASCADE;
+DROP TABLE IF EXISTS professionals CASCADE;
+DROP TABLE IF EXISTS clinics CASCADE;
+
+DROP TYPE IF EXISTS procedure_category CASCADE;
+DROP TYPE IF EXISTS treatment_area CASCADE;
+DROP TYPE IF EXISTS session_status CASCADE;
+DROP TYPE IF EXISTS photo_type CASCADE;
+DROP TYPE IF EXISTS photo_angle CASCADE;
+DROP TYPE IF EXISTS message_channel CASCADE;
+DROP TYPE IF EXISTS message_status CASCADE;
+DROP TYPE IF EXISTS skin_type CASCADE;
+DROP TYPE IF EXISTS fitzpatrick_scale CASCADE;
+
+DROP FUNCTION IF EXISTS set_updated_at CASCADE;
+DROP FUNCTION IF EXISTS set_session_number CASCADE;
+DROP FUNCTION IF EXISTS search_clients CASCADE;
+DROP VIEW IF EXISTS client_evolution_summary CASCADE;
+```
+
+Depois de resetar, execute o `00002_move_to_public_schema.sql` novamente.
 
 ### 2.2 Configurar Autenticacao
 
