@@ -23,19 +23,29 @@ export function LoginForm() {
       const supabase = createClient();
 
       if (mode === 'signup') {
-        const { data, error: signUpError } = await supabase.auth.signUp({
+        const { error: signUpError } = await supabase.auth.signUp({
           email,
           password,
         });
 
         if (signUpError) {
           setError(signUpError.message);
-        } else if (data.session) {
-          // Email confirmation disabled — user is logged in
+          setLoading(false);
+          return;
+        }
+
+        // Auto-login right after signup
+        const { error: loginError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (loginError) {
+          setError('Conta criada, mas nao foi possivel entrar automaticamente. Tente fazer login.');
+          setMode('login');
+        } else {
           router.push('/dashboard');
           router.refresh();
-        } else {
-          setSuccess('Conta criada! Verifique seu e-mail para confirmar.');
         }
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
