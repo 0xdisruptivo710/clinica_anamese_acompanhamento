@@ -23,16 +23,17 @@ export function LoginForm() {
       const supabase = createClient();
 
       if (mode === 'signup') {
-        const { error: signUpError } = await supabase.auth.signUp({
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-          },
         });
 
         if (signUpError) {
           setError(signUpError.message);
+        } else if (data.session) {
+          // Email confirmation disabled — user is logged in
+          router.push('/dashboard');
+          router.refresh();
         } else {
           setSuccess('Conta criada! Verifique seu e-mail para confirmar.');
         }
