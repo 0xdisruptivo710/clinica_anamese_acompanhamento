@@ -2,70 +2,70 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 
 export function LoginForm() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [success, setSuccess] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccess('');
 
     try {
       const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
 
-      if (authError) {
-        setError(authError.message);
+      if (mode === 'signup') {
+        const { error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
+        });
+
+        if (signUpError) {
+          setError(signUpError.message);
+        } else {
+          setSuccess('Conta criada! Verifique seu e-mail para confirmar.');
+        }
       } else {
-        setSent(true);
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInError) {
+          if (signInError.message.includes('Invalid login credentials')) {
+            setError('E-mail ou senha incorretos');
+          } else if (signInError.message.includes('Email not confirmed')) {
+            setError('Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.');
+          } else {
+            setError(signInError.message);
+          }
+        } else {
+          router.push('/dashboard');
+          router.refresh();
+        }
       }
     } catch {
-      setError('Erro ao enviar magic link. Tente novamente.');
+      setError('Erro inesperado. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (sent) {
-    return (
-      <div className="space-y-4 rounded-xl border bg-card p-8 shadow-sm text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-          <svg className="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-          </svg>
-        </div>
-        <h3 className="text-lg font-semibold">Verifique seu e-mail</h3>
-        <p className="text-sm text-muted-foreground">
-          Enviamos um link de acesso para <strong>{email}</strong>
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Nao recebeu? Verifique a pasta de spam ou{' '}
-          <button
-            onClick={() => { setSent(false); setError(''); }}
-            className="text-primary underline hover:no-underline"
-          >
-            tente novamente
-          </button>
-        </p>
-      </div>
-    );
-  }
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border bg-card p-8 shadow-sm">
       <div className="space-y-2">
-        <label htmlFor="email" className="text-sm font-medium">
-          E-mail
-        </label>
+        <label htmlFor="email" className="text-sm font-medium">E-mail</label>
         <input
           id="email"
           type="email"
@@ -76,16 +76,53 @@ export function LoginForm() {
           className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none ring-ring focus:ring-2"
         />
       </div>
+
+      <div className="space-y-2">
+        <label htmlFor="password" className="text-sm font-medium">Senha</label>
+        <input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Minimo 6 caracteres"
+          required
+          minLength={6}
+          className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none ring-ring focus:ring-2"
+        />
+      </div>
+
       {error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
       )}
+      {success && (
+        <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-600">{success}</p>
+      )}
+
       <button
         type="submit"
         disabled={loading}
         className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
       >
-        {loading ? 'Enviando...' : 'Entrar com Magic Link'}
+        {loading ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar Conta'}
       </button>
+
+      <p className="text-center text-sm text-muted-foreground">
+        {mode === 'login' ? (
+          <>
+            Nao tem conta?{' '}
+            <button type="button" onClick={() => { setMode('signup'); setError(''); setSuccess(''); }} className="text-primary underline hover:no-underline">
+              Criar conta
+            </button>
+          </>
+        ) : (
+          <>
+            Ja tem conta?{' '}
+            <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-primary underline hover:no-underline">
+              Entrar
+            </button>
+          </>
+        )}
+      </p>
     </form>
   );
 }
