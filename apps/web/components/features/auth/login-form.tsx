@@ -11,59 +11,68 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [success, setSuccess] = useState('');
+
+  const friendlyError = (msg: string) => {
+    if (msg.includes('email rate limit')) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+    if (msg.includes('User already registered')) return 'Este e-mail ja possui uma conta. Faca login.';
+    if (msg.includes('Invalid login credentials')) return 'E-mail ou senha incorretos.';
+    if (msg.includes('Email not confirmed')) return 'E-mail nao confirmado. Tente criar a conta novamente.';
+    if (msg.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns minutos.';
+    return msg;
+  };
+
+  const goToDashboard = () => {
+    router.push('/dashboard');
+    router.refresh();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setSuccess('');
 
     try {
       const supabase = createClient();
 
       if (mode === 'signup') {
-        const { error: signUpError } = await supabase.auth.signUp({
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
+          options: { data: {} },
         });
 
         if (signUpError) {
-          setError(signUpError.message);
+          // If user already exists, switch to login mode
+          if (signUpError.message.includes('User already registered')) {
+            setError('Este e-mail ja possui uma conta.');
+            setMode('login');
+            setLoading(false);
+            return;
+          }
+          setError(friendlyError(signUpError.message));
           setLoading(false);
           return;
         }
 
-        // Auto-login right after signup
-        const { error: loginError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        // If we got a session, go straight to dashboard
+        if (data.session) {
+          goToDashboard();
+          return;
+        }
 
+        // Otherwise try auto-login
+        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
         if (loginError) {
-          setError('Conta criada, mas nao foi possivel entrar automaticamente. Tente fazer login.');
-          setMode('login');
+          setError(friendlyError(loginError.message));
         } else {
-          router.push('/dashboard');
-          router.refresh();
+          goToDashboard();
         }
       } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) {
-          if (signInError.message.includes('Invalid login credentials')) {
-            setError('E-mail ou senha incorretos');
-          } else if (signInError.message.includes('Email not confirmed')) {
-            setError('Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.');
-          } else {
-            setError(signInError.message);
-          }
+          setError(friendlyError(signInError.message));
         } else {
-          router.push('/dashboard');
-          router.refresh();
+          goToDashboard();
         }
       }
     } catch {
@@ -105,9 +114,6 @@ export function LoginForm() {
       {error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
       )}
-      {success && (
-        <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-600">{success}</p>
-      )}
 
       <button
         type="submit"
@@ -121,14 +127,14 @@ export function LoginForm() {
         {mode === 'login' ? (
           <>
             Nao tem conta?{' '}
-            <button type="button" onClick={() => { setMode('signup'); setError(''); setSuccess(''); }} className="text-primary underline hover:no-underline">
+            <button type="button" onClick={() => { setMode('signup'); setError(''); }} className="text-primary underline hover:no-underline">
               Criar conta
             </button>
           </>
         ) : (
           <>
             Ja tem conta?{' '}
-            <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-primary underline hover:no-underline">
+            <button type="button" onClick={() => { setMode('login'); setError(''); }} className="text-primary underline hover:no-underline">
               Entrar
             </button>
           </>
