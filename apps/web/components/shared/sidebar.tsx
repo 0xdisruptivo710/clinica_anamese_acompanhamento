@@ -9,12 +9,14 @@ import {
   CalendarDays,
   BarChart3,
   Settings,
+  Bell,
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Clientes', href: '/clients', icon: Users },
   { name: 'Sessoes', href: '/sessions', icon: CalendarDays },
+  { name: 'Lembretes', href: '/reminders', icon: Bell },
   { name: 'Relatorios', href: '/reports', icon: BarChart3 },
   { name: 'Configuracoes', href: '/settings', icon: Settings },
 ];

@@ -9,9 +9,9 @@ export interface ClinicSettings {
   appointmentReminderHours: number;
   followUpReminderEnabled: boolean;
   followUpReminderDaysBefore: number;
-  aiosApiUrl: string;
   aiosApiKey: string;
-  aiosInstanceName: string;
+  aiosFromPhone: string;
+  crmSyncEnabled: boolean;
   aiEnabled: boolean;
 }
 
@@ -22,9 +22,9 @@ export const DEFAULT_CLINIC_SETTINGS: ClinicSettings = {
   appointmentReminderHours: 24,
   followUpReminderEnabled: false,
   followUpReminderDaysBefore: 1,
-  aiosApiUrl: '',
   aiosApiKey: '',
-  aiosInstanceName: '',
+  aiosFromPhone: '',
+  crmSyncEnabled: false,
   aiEnabled: false,
 };
 

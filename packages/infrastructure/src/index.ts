@@ -13,6 +13,8 @@ export { ResendEmailService } from './services/ResendEmailService';
 export { ClaudeAIService } from './services/ClaudeAIService';
 export { SupabaseStorageService } from './services/SupabaseStorageService';
 export { UpstashEventBus } from './services/UpstashEventBus';
+export { AiosMessageService } from './services/AiosMessageService';
+export type { AiosContact, AiosSendMessageOptions, AiosUpdateContactInput, AiosUpdateTagsInput } from './services/AiosMessageService';
 
 // Jobs
 export { PostSessionNotificationJob } from './jobs/PostSessionNotificationJob';

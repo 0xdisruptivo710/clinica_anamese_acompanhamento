@@ -106,7 +106,7 @@ export default function SettingsPage() {
     );
   }
 
-  const aiosConnected = settings.aiosApiUrl && settings.aiosApiKey && settings.aiosInstanceName;
+  const aiosConnected = Boolean(settings.aiosApiKey);
 
   return (
     <div className="space-y-6">
@@ -222,17 +222,17 @@ export default function SettingsPage() {
         </Card>
       </div>
 
-      {/* ============ AIOS INTEGRATION ============ */}
+      {/* ============ AIOS / WTS CHAT INTEGRATION ============ */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Plug className="h-5 w-5" />
-                Integracao Aios (WhatsApp)
+                Integracao Aios / WTS Chat (WhatsApp)
               </CardTitle>
               <CardDescription className="mt-1">
-                Conecte ao Aios para enviar mensagens automaticas via WhatsApp para suas clientes
+                Conecte ao Aios para enviar lembretes e mensagens via WhatsApp e sincronizar dados com o CRM
               </CardDescription>
             </div>
             {aiosConnected ? (
@@ -252,35 +252,47 @@ export default function SettingsPage() {
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
             <p className="flex items-start gap-2 text-sm text-blue-800">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
-              Os endpoints do Aios serao usados para enviar mensagens de lembrete de agendamento e mensagens pos-sessao diretamente pelo WhatsApp da cliente ja conectado no Aios.
+              O token permanente pode ser gerado na secao de integracoes do painel WTS Chat.
+              A API envia mensagens e sincroniza contatos/tags automaticamente.
             </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label>URL da API do Aios</Label>
-              <Input
-                placeholder="https://api.aios.app/v1"
-                value={settings.aiosApiUrl}
-                onChange={(e) => setSettings({ ...settings, aiosApiUrl: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Chave de API (API Key)</Label>
+              <Label>Token da API (Bearer Token)</Label>
               <Input
                 type="password"
-                placeholder="Sua chave de API do Aios"
+                placeholder="pn_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 value={settings.aiosApiKey}
                 onChange={(e) => setSettings({ ...settings, aiosApiKey: e.target.value })}
               />
+              <p className="text-[11px] text-muted-foreground">
+                Token permanente gerado em Integracoes no painel WTS Chat
+              </p>
             </div>
             <div className="space-y-2">
-              <Label>Nome da Instancia</Label>
+              <Label>Numero do canal (opcional)</Label>
               <Input
-                placeholder="Nome da instancia no Aios"
-                value={settings.aiosInstanceName}
-                onChange={(e) => setSettings({ ...settings, aiosInstanceName: e.target.value })}
+                placeholder="5511999999999"
+                value={settings.aiosFromPhone}
+                onChange={(e) => setSettings({ ...settings, aiosFromPhone: e.target.value })}
               />
+              <p className="text-[11px] text-muted-foreground">
+                Numero de telefone do canal de envio. Se vazio, usa o canal padrao.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border p-3">
+              <Switch
+                checked={settings.crmSyncEnabled}
+                onCheckedChange={(v) => setSettings({ ...settings, crmSyncEnabled: v })}
+                disabled={!aiosConnected}
+              />
+              <div>
+                <p className="text-sm font-medium">Sync automatico com CRM</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Ao atualizar anamnese ou finalizar sessao, sincroniza dados e tags do cliente no Aios
+                </p>
+              </div>
             </div>
           </div>
 

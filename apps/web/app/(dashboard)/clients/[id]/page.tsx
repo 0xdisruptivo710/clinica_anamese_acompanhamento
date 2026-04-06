@@ -20,9 +20,11 @@ import {
   User, Phone, Mail, ArrowLeft, Camera, Plus, Upload, X, Save,
   Droplets, Pill, AlertTriangle, Target, CalendarDays, Syringe,
   Image, Filter, Eye, ChevronDown, ChevronUp, FileText,
+  RefreshCw, CheckCircle2, Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { BeforeAfterSlider } from '@/components/features/photo-comparator/before-after-slider';
+import { useSyncCRM } from '@/lib/hooks/use-reminders';
 
 // ============ TYPES ============
 
@@ -217,6 +219,7 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
             </div>
           </div>
         </div>
+        <CrmSyncButton clientId={id} />
       </div>
 
       {/* Stats */}
@@ -756,5 +759,34 @@ function AnamneseTab({ clientId, client, onDone }: { clientId: string; client: C
         <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}><Save className="mr-2 h-4 w-4" />{saveMutation.isPending ? 'Salvando...' : 'Salvar Anamnese'}</Button>
       </div>
     </div>
+  );
+}
+
+// ============ CRM SYNC BUTTON ============
+
+function CrmSyncButton({ clientId }: { clientId: string }) {
+  const syncMutation = useSyncCRM();
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => syncMutation.mutate(clientId)}
+      disabled={syncMutation.isPending}
+      className="gap-2 text-xs"
+    >
+      {syncMutation.isPending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : syncMutation.isSuccess ? (
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+      ) : (
+        <RefreshCw className="h-3.5 w-3.5" />
+      )}
+      {syncMutation.isPending
+        ? 'Sincronizando...'
+        : syncMutation.isSuccess
+          ? 'Sincronizado!'
+          : 'Sync CRM'}
+    </Button>
   );
 }
