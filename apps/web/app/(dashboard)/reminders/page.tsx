@@ -264,16 +264,17 @@ export default function RemindersPage() {
 
       {/* Send result feedback */}
       {sendMutation.isSuccess && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-          <p className="flex items-center gap-2 text-sm text-emerald-800">
-            <CheckCircle2 className="h-4 w-4" />
-            {sendMutation.data.sent} mensagem(ns) enviada(s) com sucesso
-            {sendMutation.data.failed > 0 && (
-              <span className="text-red-600">
-                , {sendMutation.data.failed} falha(s)
-              </span>
-            )}
+        <div className={`rounded-lg border p-3 ${sendMutation.data.failed > 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
+          <p className={`flex items-center gap-2 text-sm ${sendMutation.data.failed > 0 ? 'text-red-800' : 'text-emerald-800'}`}>
+            {sendMutation.data.failed > 0 ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+            {sendMutation.data.sent} enviada(s) com sucesso
+            {sendMutation.data.failed > 0 && `, ${sendMutation.data.failed} falha(s)`}
           </p>
+          {sendMutation.data.results?.filter((r: { success: boolean; error?: string }) => !r.success).map((r: { id: string; error?: string }, i: number) => (
+            <p key={i} className="mt-1 text-xs text-red-600 pl-6">
+              {r.error || 'Erro desconhecido'}
+            </p>
+          ))}
         </div>
       )}
 

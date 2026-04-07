@@ -134,15 +134,30 @@ export interface FlwCreateContactInput {
  * - https://api.wts.chat (alias)
  * - https://api.flw.chat (alias)
  *
- * All endpoints use /v1/... paths (no /chat/ or /core/ prefix)
+ * Path routing:
+ * - api.wts.chat → chat endpoints: /chat/v1/..., core endpoints: /core/v1/...
+ * - api.flw.chat or api.flwchat.com.br → all endpoints: /v1/...
  */
 export class FlwChatService implements IMessageService {
   private readonly baseUrl: string;
   private readonly apiToken: string;
+  private readonly useSubPaths: boolean;
 
   constructor(apiToken: string, baseUrl = 'https://api.wts.chat') {
     this.apiToken = apiToken;
     this.baseUrl = baseUrl.replace(/\/$/, '');
+    // api.wts.chat uses /chat/ and /core/ sub-paths; flw.chat and flwchat.com.br don't
+    this.useSubPaths = this.baseUrl.includes('wts.chat');
+  }
+
+  /** Resolve path for chat-related endpoints (messages, templates, channels, scheduled) */
+  private chatPath(path: string): string {
+    return this.useSubPaths ? `/chat${path}` : path;
+  }
+
+  /** Resolve path for core endpoints (contacts, tags) */
+  private corePath(path: string): string {
+    return this.useSubPaths ? `/core${path}` : path;
   }
 
   private headers(): Record<string, string> {
@@ -228,7 +243,7 @@ export class FlwChatService implements IMessageService {
     if (options.from) payload.from = options.from;
     if (options.botId) payload.botId = options.botId;
 
-    return this.request<FlwSendResponse>('POST', '/v1/message/send', payload);
+    return this.request<FlwSendResponse>('POST', this.chatPath('/v1/message/send'), payload);
   }
 
   /** Synchronous send — waits for delivery confirmation */
@@ -250,16 +265,15 @@ export class FlwChatService implements IMessageService {
     if (options.from) payload.from = options.from;
     if (options.botId) payload.botId = options.botId;
 
-    return this.request<FlwSendResponse>('POST', '/v1/message/send-sync', payload);
+    return this.request<FlwSendResponse>('POST', this.chatPath('/v1/message/send-sync'), payload);
   }
 
-  /** GET /v1/message/{id}/status */
   async getMessageStatus(messageId: string): Promise<unknown> {
-    return this.request('GET', `/v1/message/${messageId}/status`);
+    return this.request('GET', this.chatPath(`/v1/message/${messageId}/status`));
   }
 
   // ──────────────────────────────────────────────
-  // Scheduled Messages — /v1/scheduled-message
+  // Scheduled Messages
   // ──────────────────────────────────────────────
 
   async createScheduledMessage(input: FlwCreateScheduledMessageInput): Promise<FlwScheduledMessage> {
@@ -275,7 +289,7 @@ export class FlwChatService implements IMessageService {
     if (input.botId) payload.botId = input.botId;
     if (input.templateParams) payload.templateParams = input.templateParams;
 
-    return this.request<FlwScheduledMessage>('POST', '/v1/scheduled-message', payload);
+    return this.request<FlwScheduledMessage>('POST', this.chatPath('/v1/scheduled-message'), payload);
   }
 
   async listScheduledMessages(filters?: {
@@ -297,7 +311,7 @@ export class FlwChatService implements IMessageService {
     params.set('PageSize', String(filters?.pageSize ?? 50));
 
     const qs = params.toString();
-    return this.request('GET', `/v1/scheduled-message?${qs}`);
+    return this.request('GET', this.chatPath(`/v1/scheduled-message?${qs}`));
   }
 
   async updateScheduledMessage(id: string, data: {
@@ -313,18 +327,18 @@ export class FlwChatService implements IMessageService {
     if (data.to) fields.push('To');
     if (data.from) fields.push('From');
 
-    return this.request<FlwScheduledMessage>('PUT', `/v1/scheduled-message/${id}`, {
+    return this.request<FlwScheduledMessage>('PUT', this.chatPath(`/v1/scheduled-message/${id}`), {
       fields,
       ...data,
     });
   }
 
   async cancelScheduledMessage(id: string): Promise<void> {
-    await this.request('POST', `/v1/scheduled-message/${id}/cancel`);
+    await this.request('POST', this.chatPath(`/v1/scheduled-message/${id}/cancel`));
   }
 
   async cancelScheduledMessagesBatch(ids: string[]): Promise<void> {
-    await this.request('POST', '/v1/scheduled-message/batch/cancel', { ids });
+    await this.request('POST', this.chatPath('/v1/scheduled-message/batch/cancel'), { ids });
   }
 
   // ──────────────────────────────────────────────
@@ -348,26 +362,26 @@ export class FlwChatService implements IMessageService {
     params.set('PageSize', String(filters?.pageSize ?? 100));
 
     const qs = params.toString();
-    return this.request('GET', `/v1/template?${qs}`);
+    return this.request('GET', this.chatPath(`/v1/template?${qs}`));
   }
 
   // ──────────────────────────────────────────────
-  // Channels — /v1/channel
+  // Channels
   // ──────────────────────────────────────────────
 
   async listChannels(channelType?: string): Promise<FlwChannel[]> {
     const params = new URLSearchParams();
     if (channelType) params.set('ChannelType', channelType);
     const qs = params.toString();
-    return this.request('GET', `/v1/channel${qs ? `?${qs}` : ''}`);
+    return this.request('GET', this.chatPath(`/v1/channel${qs ? `?${qs}` : ''}`));
   }
 
   // ──────────────────────────────────────────────
-  // Contacts — /v1/contact
+  // Contacts
   // ──────────────────────────────────────────────
 
   async createContact(input: FlwCreateContactInput): Promise<FlwContact> {
-    return this.request<FlwContact>('POST', '/v1/contact', input);
+    return this.request<FlwContact>('POST', this.corePath('/v1/contact'), input);
   }
 
   async getContactByPhone(phone: string, includeDetails?: string[]): Promise<FlwContact | null> {
@@ -380,7 +394,7 @@ export class FlwChatService implements IMessageService {
     try {
       return await this.request<FlwContact>(
         'GET',
-        `/v1/contact/phonenumber/${encodeURIComponent(phone)}${qs ? `?${qs}` : ''}`,
+        this.corePath(`/v1/contact/phonenumber/${encodeURIComponent(phone)}${qs ? `?${qs}` : ''}`),
       );
     } catch (error) {
       if (error instanceof Error && error.message.includes('404')) return null;
@@ -403,7 +417,7 @@ export class FlwChatService implements IMessageService {
 
     return this.request<FlwContact>(
       'PUT',
-      `/v1/contact/phonenumber/${encodeURIComponent(phone)}`,
+      this.corePath(`/v1/contact/phonenumber/${encodeURIComponent(phone)}`),
       { ...data, fields },
     );
   }
@@ -411,7 +425,7 @@ export class FlwChatService implements IMessageService {
   async updateTagsByPhone(phone: string, input: FlwUpdateTagsInput): Promise<FlwContact> {
     return this.request<FlwContact>(
       'POST',
-      `/v1/contact/phonenumber/${encodeURIComponent(phone)}/tags`,
+      this.corePath(`/v1/contact/phonenumber/${encodeURIComponent(phone)}/tags`),
       input,
     );
   }
