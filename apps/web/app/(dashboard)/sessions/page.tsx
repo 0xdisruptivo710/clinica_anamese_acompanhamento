@@ -29,7 +29,7 @@ import {
   Activity,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useSessions, useSessionDetail } from '@/lib/hooks/use-sessions';
+import { useSessions, useSessionDetail, useUpdateSessionStatus } from '@/lib/hooks/use-sessions';
 import type { SessionListItem } from '@/lib/hooks/use-sessions';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; dotColor: string }> = {
@@ -89,13 +89,90 @@ export default function SessionsPage() {
     return counts;
   }, [sessions]);
 
+  // Agenda: group sessions by date
+  const todayStr = new Date().toLocaleDateString('pt-BR');
+  const todaySessions = sessions.filter((s) => {
+    const d = new Date(s.sessionDate).toLocaleDateString('pt-BR');
+    return d === todayStr && (s.status === 'scheduled' || s.status === 'in_progress');
+  });
+
+  const upcomingSessions = sessions.filter((s) => {
+    return s.status === 'scheduled' && new Date(s.sessionDate) > new Date();
+  }).slice(0, 5);
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Sessoes</h1>
-        <p className="text-muted-foreground">Todas as sessoes da clinica com acesso rapido ao perfil do cliente</p>
+        <h1 className="text-3xl font-bold tracking-tight">Sessoes e Agenda</h1>
+        <p className="text-muted-foreground">Visualize seus agendamentos e gerencie o status de cada sessao</p>
       </div>
+
+      {/* Agenda do Dia */}
+      {todaySessions.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold mb-3">
+              <CalendarDays className="h-4 w-4 text-primary" />
+              Agenda de Hoje — {todayStr}
+            </h3>
+            <div className="space-y-2">
+              {todaySessions.map((s) => {
+                const date = new Date(s.sessionDate);
+                const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.scheduled;
+                return (
+                  <div key={s.id} className="flex items-center gap-3 rounded-lg border p-3">
+                    <div className="text-center min-w-[50px]">
+                      <p className="text-lg font-bold text-primary">{date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                    <Separator orientation="vertical" className="h-8" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{s.client?.fullName ?? 'Cliente'}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${cfg.color}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${cfg.dotColor}`} />{cfg.label}
+                        </span>
+                        {s.procedures?.length > 0 && (
+                          <span className="text-[11px] text-muted-foreground">{s.procedures.map((p) => p.procedureName || procLabel(p.category)).join(', ')}</span>
+                        )}
+                      </div>
+                    </div>
+                    {s.client && (
+                      <Link href={`/clients/${s.client.id}`}>
+                        <Button variant="ghost" size="sm" className="text-xs"><User className="h-3 w-3 mr-1" />Perfil</Button>
+                      </Link>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Proximos agendamentos */}
+      {upcomingSessions.length > 0 && todaySessions.length === 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold mb-3">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              Proximos Agendamentos
+            </h3>
+            <div className="space-y-1.5">
+              {upcomingSessions.map((s) => {
+                const date = new Date(s.sessionDate);
+                return (
+                  <div key={s.id} className="flex items-center gap-3 text-sm">
+                    <span className="font-medium text-primary min-w-[80px]">{date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                    <span className="text-muted-foreground">{date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="truncate">{s.client?.fullName ?? 'Cliente'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Search */}
       <div className="relative">
@@ -485,6 +562,9 @@ function SessionExpandedDetails({ session }: { session: SessionListItem }) {
             </div>
           ) : null}
 
+          {/* Status Change */}
+          <SessionStatusButtons sessionId={session.id} currentStatus={session.status} />
+
           {/* Financial & Follow-up */}
           {(session.totalValue || session.followUpDate || session.painScore != null) && (
             <div className="flex flex-wrap gap-3">
@@ -632,6 +712,64 @@ function SessionExpandedDetails({ session }: { session: SessionListItem }) {
               </Link>
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============ SESSION STATUS BUTTONS ============
+
+function SessionStatusButtons({ sessionId, currentStatus }: { sessionId: string; currentStatus: string }) {
+  const statusMutation = useUpdateSessionStatus();
+
+  const changeStatus = (newStatus: string) => {
+    statusMutation.mutate({ id: sessionId, status: newStatus });
+  };
+
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Marcar presenca</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant={currentStatus === 'completed' ? 'default' : 'outline'}
+          className="gap-1.5 text-xs h-7"
+          onClick={() => changeStatus('completed')}
+          disabled={statusMutation.isPending || currentStatus === 'completed'}
+        >
+          <ExternalLink className="h-3 w-3" />
+          Compareceu
+        </Button>
+        <Button
+          size="sm"
+          variant={currentStatus === 'no_show' ? 'destructive' : 'outline'}
+          className="gap-1.5 text-xs h-7"
+          onClick={() => changeStatus('no_show')}
+          disabled={statusMutation.isPending || currentStatus === 'no_show'}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Faltou
+        </Button>
+        <Button
+          size="sm"
+          variant={currentStatus === 'cancelled' ? 'secondary' : 'outline'}
+          className="gap-1.5 text-xs h-7"
+          onClick={() => changeStatus('cancelled')}
+          disabled={statusMutation.isPending || currentStatus === 'cancelled'}
+        >
+          Desmarcou
+        </Button>
+        {currentStatus !== 'scheduled' && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gap-1.5 text-xs h-7 text-muted-foreground"
+            onClick={() => changeStatus('scheduled')}
+            disabled={statusMutation.isPending}
+          >
+            Voltar para Agendada
+          </Button>
         )}
       </div>
     </div>

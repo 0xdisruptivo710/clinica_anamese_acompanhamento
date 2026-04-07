@@ -25,6 +25,7 @@ import {
 import Link from 'next/link';
 import { BeforeAfterSlider } from '@/components/features/photo-comparator/before-after-slider';
 import { useSyncCRM } from '@/lib/hooks/use-reminders';
+import { useUpdateSessionStatus } from '@/lib/hooks/use-sessions';
 
 // ============ TYPES ============
 
@@ -564,6 +565,9 @@ function SessionsTab({ clientId, sessions, photos, client, onDone }: { clientId:
 
                       {session.total_value && <p className="text-sm font-medium">Valor: R$ {Number(session.total_value).toFixed(2)}</p>}
                       {session.follow_up_date && <p className="text-xs text-muted-foreground">Retorno: {new Date(session.follow_up_date).toLocaleDateString('pt-BR')}</p>}
+
+                      {/* Status Change */}
+                      <SessionStatusChanger sessionId={session.id} currentStatus={session.status} onDone={onDone} />
                     </div>
                   )}
                 </CardContent>
@@ -586,7 +590,7 @@ function SessionsTab({ clientId, sessions, photos, client, onDone }: { clientId:
 function NewSessionDialog({ clientId, client, onDone }: { clientId: string; client: ClientData; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 16));
-  const [status, setStatus] = useState('completed');
+  const [status, setStatus] = useState('scheduled');
   const [complaint, setComplaint] = useState('');
   const [notes, setNotes] = useState('');
   const [postNotes, setPostNotes] = useState('');
@@ -757,6 +761,65 @@ function AnamneseTab({ clientId, client, onDone }: { clientId: string; client: C
       <div className="flex justify-end gap-3">
         <Button variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
         <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}><Save className="mr-2 h-4 w-4" />{saveMutation.isPending ? 'Salvando...' : 'Salvar Anamnese'}</Button>
+      </div>
+    </div>
+  );
+}
+
+// ============ SESSION STATUS CHANGER ============
+
+function SessionStatusChanger({ sessionId, currentStatus, onDone }: { sessionId: string; currentStatus: string; onDone: () => void }) {
+  const statusMutation = useUpdateSessionStatus();
+
+  const changeStatus = (newStatus: string) => {
+    statusMutation.mutate({ id: sessionId, status: newStatus }, { onSuccess: onDone });
+  };
+
+  return (
+    <div className="rounded-md border bg-muted/30 p-3">
+      <p className="text-xs font-medium text-muted-foreground mb-2">Marcar presenca:</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant={currentStatus === 'completed' ? 'default' : 'outline'}
+          className="gap-1.5 text-xs"
+          onClick={() => changeStatus('completed')}
+          disabled={statusMutation.isPending || currentStatus === 'completed'}
+        >
+          <CheckCircle2 className="h-3 w-3" />
+          Compareceu
+        </Button>
+        <Button
+          size="sm"
+          variant={currentStatus === 'no_show' ? 'destructive' : 'outline'}
+          className="gap-1.5 text-xs"
+          onClick={() => changeStatus('no_show')}
+          disabled={statusMutation.isPending || currentStatus === 'no_show'}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Faltou
+        </Button>
+        <Button
+          size="sm"
+          variant={currentStatus === 'cancelled' ? 'secondary' : 'outline'}
+          className="gap-1.5 text-xs"
+          onClick={() => changeStatus('cancelled')}
+          disabled={statusMutation.isPending || currentStatus === 'cancelled'}
+        >
+          <X className="h-3 w-3" />
+          Desmarcou
+        </Button>
+        {currentStatus !== 'scheduled' && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gap-1.5 text-xs text-muted-foreground"
+            onClick={() => changeStatus('scheduled')}
+            disabled={statusMutation.isPending}
+          >
+            Voltar para Agendada
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -164,3 +164,28 @@ export function useAddProcedure() {
     },
   });
 }
+
+async function updateSessionStatus(id: string, status: string) {
+  const res = await fetch(`/api/v1/sessions/${id}/status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to update status');
+  }
+  return res.json();
+}
+
+export function useUpdateSessionStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      updateSessionStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['reminders'] });
+    },
+  });
+}
