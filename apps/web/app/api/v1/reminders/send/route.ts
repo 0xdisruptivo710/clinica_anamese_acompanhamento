@@ -20,6 +20,17 @@ const PROCEDURE_LABELS: Record<string, string> = {
   other: 'Outro',
 };
 
+interface ReminderTarget {
+  id: string;
+  type: string;
+  clientId: string;
+  clientName: string;
+  clientPhone: string;
+  sessionId: string;
+  sessionDate: string;
+  followUpDate?: string;
+}
+
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser();
   if (!user) return errorResponse('Not authenticated', 401);
@@ -33,9 +44,12 @@ export async function POST(request: Request) {
     type?: 'all_today' | 'all_overdue';
   };
 
+  if (!reminderIds?.length && !batchType) {
+    return errorResponse('reminderIds or type (all_today/all_overdue) required', 400);
+  }
+
   const admin = getSupabaseAdminClient();
 
-  // Get clinic settings & name
   const { data: clinic } = await admin
     .from('clinics')
     .select('name, settings')
@@ -54,99 +68,226 @@ export async function POST(request: Request) {
   const fromPhone = (settings.flwFromPhone || settings.aiosFromPhone) as string | undefined;
   const results: Array<{ id: string; success: boolean; error?: string }> = [];
 
-  // Get all reminders first via internal fetch to reuse logic
-  const remindersRes = await fetch(new URL('/api/v1/reminders', request.url).toString(), {
-    headers: request.headers,
-  });
-  const remindersData = await remindersRes.json();
-  let reminders = remindersData.reminders as Array<{
-    id: string;
-    type: string;
-    clientId: string;
-    clientName: string;
-    clientPhone: string;
-    sessionId: string;
-    sessionDate: string;
-    followUpDate?: string;
-    status: string;
-    dueAt: string;
-  }>;
+  // Build reminder targets directly from DB
+  const targets: ReminderTarget[] = [];
+  const now = new Date();
 
-  // Filter based on request
   if (reminderIds?.length) {
-    reminders = reminders.filter((r) => reminderIds.includes(r.id));
-  } else if (batchType === 'all_today') {
-    const todayStr = new Date().toISOString().split('T')[0];
-    reminders = reminders.filter(
-      (r) => r.status !== 'sent' && r.dueAt.startsWith(todayStr),
-    );
-  } else if (batchType === 'all_overdue') {
-    reminders = reminders.filter((r) => r.status === 'overdue');
+    // Parse reminder IDs to get session IDs and types
+    for (const rid of reminderIds) {
+      const [type, sessionId] = rid.includes('_')
+        ? [rid.substring(0, rid.lastIndexOf('_')), rid.substring(rid.lastIndexOf('_') + 1)]
+        : ['unknown', rid];
+
+      const reminderType = type.replace('appt', 'appointment').replace('followup', 'follow_up').replace('postsession', 'post_session');
+
+      const { data: session } = await admin
+        .from('sessions')
+        .select('id, session_date, follow_up_date, client_id, clients!inner(full_name, phone, whatsapp)')
+        .eq('id', sessionId)
+        .single();
+
+      if (session) {
+        const client = session.clients as unknown as { full_name: string; phone: string; whatsapp: string };
+        targets.push({
+          id: rid,
+          type: reminderType,
+          clientId: session.client_id,
+          clientName: client.full_name,
+          clientPhone: client.whatsapp || client.phone,
+          sessionId: session.id,
+          sessionDate: session.session_date,
+          followUpDate: session.follow_up_date ?? undefined,
+        });
+      }
+    }
   } else {
-    return errorResponse('reminderIds or type (all_today/all_overdue) required', 400);
+    // Batch: get sessions based on type
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+
+    // Scheduled sessions (appointment reminders)
+    const { data: scheduled } = await admin
+      .from('sessions')
+      .select('id, session_date, client_id, clients!inner(full_name, phone, whatsapp)')
+      .eq('clinic_id', clinicId)
+      .eq('status', 'scheduled')
+      .gte('session_date', todayStart)
+      .order('session_date', { ascending: true })
+      .limit(50);
+
+    for (const s of scheduled ?? []) {
+      const client = s.clients as unknown as { full_name: string; phone: string; whatsapp: string };
+      const sessionDate = new Date(s.session_date);
+      const reminderHours = (settings.appointmentReminderHours as number) ?? 24;
+      const dueAt = new Date(sessionDate.getTime() - reminderHours * 60 * 60 * 1000);
+      const isOverdue = dueAt < now && sessionDate > now;
+      const isToday = dueAt >= new Date(todayStart) && dueAt < new Date(todayEnd);
+
+      if (batchType === 'all_overdue' && !isOverdue) continue;
+      if (batchType === 'all_today' && !isToday && !isOverdue) continue;
+
+      // Check not already sent
+      const { data: existing } = await admin
+        .from('client_messages')
+        .select('id')
+        .eq('session_id', s.id)
+        .like('idempotency_key', 'reminder_appointment_%')
+        .limit(1);
+      if (existing && existing.length > 0) continue;
+
+      targets.push({
+        id: `appt_${s.id}`,
+        type: 'appointment',
+        clientId: s.client_id,
+        clientName: client.full_name,
+        clientPhone: client.whatsapp || client.phone,
+        sessionId: s.id,
+        sessionDate: s.session_date,
+      });
+    }
+
+    // Follow-up reminders
+    const { data: followUps } = await admin
+      .from('sessions')
+      .select('id, session_date, follow_up_date, client_id, clients!inner(full_name, phone, whatsapp)')
+      .eq('clinic_id', clinicId)
+      .eq('status', 'completed')
+      .not('follow_up_date', 'is', null)
+      .gte('follow_up_date', new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      .order('follow_up_date', { ascending: true })
+      .limit(50);
+
+    for (const s of followUps ?? []) {
+      const client = s.clients as unknown as { full_name: string; phone: string; whatsapp: string };
+      const followUpDate = new Date(s.follow_up_date + 'T09:00:00');
+      const daysBefore = (settings.followUpReminderDaysBefore as number) ?? 1;
+      const dueAt = new Date(followUpDate.getTime() - daysBefore * 24 * 60 * 60 * 1000);
+      const isOverdue = dueAt < now;
+      const isToday = dueAt >= new Date(todayStart) && dueAt < new Date(todayEnd);
+
+      if (batchType === 'all_overdue' && !isOverdue) continue;
+      if (batchType === 'all_today' && !isToday && !isOverdue) continue;
+
+      const { data: existing } = await admin
+        .from('client_messages')
+        .select('id')
+        .eq('session_id', s.id)
+        .like('idempotency_key', 'reminder_followup_%')
+        .limit(1);
+      if (existing && existing.length > 0) continue;
+
+      targets.push({
+        id: `followup_${s.id}`,
+        type: 'follow_up',
+        clientId: s.client_id,
+        clientName: client.full_name,
+        clientPhone: client.whatsapp || client.phone,
+        sessionId: s.id,
+        sessionDate: s.session_date,
+        followUpDate: s.follow_up_date,
+      });
+    }
+
+    // Post-session
+    const { data: completed } = await admin
+      .from('sessions')
+      .select('id, session_date, client_id, clients!inner(full_name, phone, whatsapp)')
+      .eq('clinic_id', clinicId)
+      .eq('status', 'completed')
+      .gte('session_date', new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order('session_date', { ascending: false })
+      .limit(50);
+
+    for (const s of completed ?? []) {
+      const client = s.clients as unknown as { full_name: string; phone: string; whatsapp: string };
+
+      const { data: existing } = await admin
+        .from('client_messages')
+        .select('id')
+        .eq('session_id', s.id)
+        .like('idempotency_key', 'postsession_%')
+        .limit(1);
+      if (existing && existing.length > 0) continue;
+
+      const sessionDate = new Date(s.session_date);
+      const delayMin = (settings.postSessionMessageDelay as number) ?? 30;
+      const dueAt = new Date(sessionDate.getTime() + delayMin * 60 * 1000);
+      const isOverdue = dueAt < now;
+      const isToday = sessionDate >= new Date(todayStart) && sessionDate < new Date(todayEnd);
+
+      if (batchType === 'all_overdue' && !isOverdue) continue;
+      if (batchType === 'all_today' && !isToday && !isOverdue) continue;
+
+      targets.push({
+        id: `postsession_${s.id}`,
+        type: 'post_session',
+        clientId: s.client_id,
+        clientName: client.full_name,
+        clientPhone: client.whatsapp || client.phone,
+        sessionId: s.id,
+        sessionDate: s.session_date,
+      });
+    }
   }
 
-  // Skip already sent
-  reminders = reminders.filter((r) => r.status !== 'sent');
-
-  for (const reminder of reminders) {
+  // Send messages
+  for (const target of targets) {
     try {
-      // Get procedures for this session
       const { data: procs } = await admin
         .from('session_procedures')
         .select('category, procedure_name')
-        .eq('session_id', reminder.sessionId);
+        .eq('session_id', target.sessionId);
 
       const procList = (procs ?? [])
         .map((p: { category: string; procedure_name: string }) => p.procedure_name || PROCEDURE_LABELS[p.category] || p.category)
         .join(', ');
 
-      const message = buildMessage(reminder.type, {
-        clientName: reminder.clientName,
+      const message = buildMessage(target.type, {
+        clientName: target.clientName,
         clinicName,
-        sessionDate: reminder.sessionDate,
-        followUpDate: reminder.followUpDate,
+        sessionDate: target.sessionDate,
+        followUpDate: target.followUpDate,
         procedures: procList,
       });
 
       // Check if there's a template configured for this type
-      const templateKey = `${reminder.type}TemplateId`;
+      const templateKey = `${target.type}TemplateId`;
       const templateId = settings[templateKey] as string | undefined;
 
       const result = await flw.sendMessage({
-        to: reminder.clientPhone,
+        to: target.clientPhone,
         from: fromPhone,
         text: templateId ? undefined : message,
         templateId: templateId || undefined,
-        parameters: templateId ? { client_name: reminder.clientName, clinic_name: clinicName } : undefined,
+        parameters: templateId ? { client_name: target.clientName, clinic_name: clinicName } : undefined,
         hiddenSession: true,
       });
 
-      // Save to client_messages
       const idempotencyPrefix =
-        reminder.type === 'appointment'
+        target.type === 'appointment'
           ? 'reminder_appointment_'
-          : reminder.type === 'follow_up'
+          : target.type === 'follow_up'
             ? 'reminder_followup_'
             : 'postsession_';
 
       await admin.from('client_messages').insert({
         clinic_id: clinicId,
-        client_id: reminder.clientId,
-        session_id: reminder.sessionId,
+        client_id: target.clientId,
+        session_id: target.sessionId,
         channel: 'whatsapp',
         status: result.status === 'FAILED' ? 'failed' : 'sent',
         body: message,
         is_ai_generated: false,
         external_message_id: result.id,
         sent_at: new Date().toISOString(),
-        idempotency_key: `${idempotencyPrefix}${reminder.sessionId}`,
+        idempotency_key: `${idempotencyPrefix}${target.sessionId}`,
       });
 
-      results.push({ id: reminder.id, success: true });
+      results.push({ id: target.id, success: true });
     } catch (error) {
       results.push({
-        id: reminder.id,
+        id: target.id,
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
