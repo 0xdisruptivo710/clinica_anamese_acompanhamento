@@ -16,7 +16,6 @@ import {
   Clock,
   Phone,
   User,
-  ArrowRight,
   RefreshCw,
   Zap,
 } from 'lucide-react';
@@ -25,9 +24,9 @@ import { useReminders, useSendReminders } from '@/lib/hooks/use-reminders';
 import type { ReminderItem } from '@/lib/hooks/use-reminders';
 
 const TYPE_CONFIG: Record<string, { label: string; icon: typeof Bell; color: string; bg: string }> = {
-  appointment: { label: 'Agendamento', icon: CalendarClock, color: 'text-purple-600', bg: 'bg-purple-100' },
-  follow_up: { label: 'Retorno', icon: MessageCircle, color: 'text-emerald-600', bg: 'bg-emerald-100' },
-  post_session: { label: 'Pos-sessao', icon: Send, color: 'text-blue-600', bg: 'bg-blue-100' },
+  appointment: { label: 'Lembrete', icon: CalendarClock, color: 'text-purple-600', bg: 'bg-purple-100' },
+  post_session: { label: 'Pos-procedimento', icon: Send, color: 'text-blue-600', bg: 'bg-blue-100' },
+  follow_up: { label: 'Follow-up', icon: MessageCircle, color: 'text-orange-600', bg: 'bg-orange-100' },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; dotColor: string }> = {
@@ -46,9 +45,9 @@ const FILTER_TABS = [
 
 const TYPE_TABS = [
   { key: '', label: 'Todos' },
-  { key: 'appointment', label: 'Agendamento' },
-  { key: 'follow_up', label: 'Retorno' },
-  { key: 'post_session', label: 'Pos-sessao' },
+  { key: 'appointment', label: 'Lembrete' },
+  { key: 'post_session', label: 'Pos-procedimento' },
+  { key: 'follow_up', label: 'Follow-up (Faltou/Desmarcou)' },
 ] as const;
 
 export default function RemindersPage() {
@@ -389,23 +388,30 @@ function ReminderCard({
             </Badge>
           </div>
 
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+          {reminder.description && (
+            <p className="mt-0.5 text-xs text-muted-foreground">{reminder.description}</p>
+          )}
+
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
             <span className={`font-medium ${typeCfg.color}`}>{typeCfg.label}</span>
+            {reminder.sessionStatus && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                {reminder.sessionStatus === 'scheduled' ? 'Agendada' :
+                 reminder.sessionStatus === 'completed' ? 'Concluida' :
+                 reminder.sessionStatus === 'no_show' ? 'Faltou' :
+                 reminder.sessionStatus === 'cancelled' ? 'Cancelada' :
+                 reminder.sessionStatus}
+              </Badge>
+            )}
             <span className="flex items-center gap-1">
               <Phone className="h-3 w-3" />
               {reminder.clientPhone}
             </span>
             <span className="flex items-center gap-1">
               <CalendarClock className="h-3 w-3" />
-              Sessao: {sessionDate.toLocaleDateString('pt-BR')}{' '}
+              Sessao #{reminder.sessionNumber ?? '?'}: {sessionDate.toLocaleDateString('pt-BR')}{' '}
               {sessionDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
             </span>
-            {reminder.followUpDate && (
-              <span className="flex items-center gap-1">
-                <ArrowRight className="h-3 w-3" />
-                Retorno: {new Date(reminder.followUpDate + 'T00:00:00').toLocaleDateString('pt-BR')}
-              </span>
-            )}
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
               Envio: {dueDate.toLocaleDateString('pt-BR')}{' '}

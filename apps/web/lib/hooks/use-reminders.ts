@@ -9,11 +9,14 @@ export interface ReminderItem {
   clientName: string;
   clientPhone: string;
   sessionId: string;
+  sessionNumber: number;
   sessionDate: string;
+  sessionStatus: string;
   followUpDate?: string;
-  status: 'pending' | 'sent' | 'overdue' | 'skipped';
+  status: 'pending' | 'sent' | 'overdue';
   procedureSummary: string;
   dueAt: string;
+  description: string;
 }
 
 export interface RemindersResponse {
