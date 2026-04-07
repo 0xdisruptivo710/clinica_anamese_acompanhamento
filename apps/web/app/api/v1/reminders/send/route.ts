@@ -1,5 +1,5 @@
 import { getAuthenticatedUser, ensureClinicSetup, errorResponse, successResponse } from '@/lib/api-helpers';
-import { getSupabaseAdminClient, AiosMessageService } from '@aesthetic-track/infrastructure';
+import { getSupabaseAdminClient, FlwChatService } from '@aesthetic-track/infrastructure';
 
 const PROCEDURE_LABELS: Record<string, string> = {
   facial_botox: 'Botox',
@@ -44,13 +44,14 @@ export async function POST(request: Request) {
 
   const settings = (clinic?.settings ?? {}) as Record<string, unknown>;
   const clinicName = clinic?.name ?? 'a clinica';
-  const aiosToken = settings.aiosApiKey as string;
+  const token = (settings.flwApiToken || settings.aiosApiKey) as string;
 
-  if (!aiosToken) {
-    return errorResponse('Aios API not configured', 400);
+  if (!token) {
+    return errorResponse('FLW Chat API not configured', 400);
   }
 
-  const aios = new AiosMessageService(aiosToken);
+  const flw = new FlwChatService(token);
+  const fromPhone = (settings.flwFromPhone || settings.aiosFromPhone) as string | undefined;
   const results: Array<{ id: string; success: boolean; error?: string }> = [];
 
   // Get all reminders first via internal fetch to reuse logic
@@ -108,9 +109,16 @@ export async function POST(request: Request) {
         procedures: procList,
       });
 
-      const result = await aios.sendWhatsApp({
+      // Check if there's a template configured for this type
+      const templateKey = `${reminder.type}TemplateId`;
+      const templateId = settings[templateKey] as string | undefined;
+
+      const result = await flw.sendMessage({
         to: reminder.clientPhone,
-        text: message,
+        from: fromPhone,
+        text: templateId ? undefined : message,
+        templateId: templateId || undefined,
+        parameters: templateId ? { client_name: reminder.clientName, clinic_name: clinicName } : undefined,
         hiddenSession: true,
       });
 

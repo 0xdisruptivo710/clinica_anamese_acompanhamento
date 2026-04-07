@@ -1,5 +1,5 @@
 import { getAuthenticatedUser, ensureClinicSetup, errorResponse, successResponse } from '@/lib/api-helpers';
-import { getSupabaseAdminClient, AiosMessageService } from '@aesthetic-track/infrastructure';
+import { getSupabaseAdminClient, FlwChatService } from '@aesthetic-track/infrastructure';
 
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser();
@@ -23,10 +23,10 @@ export async function POST(request: Request) {
     .single();
 
   const settings = (clinic?.settings ?? {}) as Record<string, string>;
-  const aiosToken = settings.aiosApiKey;
+  const token = settings.flwApiToken || settings.aiosApiKey;
 
-  if (!aiosToken) {
-    return errorResponse('Aios API not configured', 400);
+  if (!token) {
+    return errorResponse('FLW Chat API not configured', 400);
   }
 
   // Get full client data
@@ -51,10 +51,10 @@ export async function POST(request: Request) {
     ...new Set((procedures ?? []).map((p: { category: string }) => p.category)),
   ];
 
-  const aios = new AiosMessageService(aiosToken);
+  const flw = new FlwChatService(token);
 
   try {
-    const result = await aios.syncClientToCRM({
+    const result = await flw.syncClientToCRM({
       phone,
       fullName: client.full_name,
       email: client.email ?? undefined,

@@ -1,5 +1,5 @@
 import { getAuthenticatedUser, ensureClinicSetup, errorResponse, successResponse } from '@/lib/api-helpers';
-import { getSupabaseAdminClient, AiosMessageService } from '@aesthetic-track/infrastructure';
+import { getSupabaseAdminClient, FlwChatService } from '@aesthetic-track/infrastructure';
 
 export async function POST(request: Request) {
   const user = await getAuthenticatedUser();
@@ -9,12 +9,13 @@ export async function POST(request: Request) {
   if (!clinicId) return errorResponse('Clinic not set up', 404);
 
   const body = await request.json();
-  const { clientId, phone, message, templateId, parameters } = body as {
+  const { clientId, phone, message, templateId, parameters, scheduleAt } = body as {
     clientId?: string;
     phone?: string;
     message?: string;
     templateId?: string;
     parameters?: Record<string, string>;
+    scheduleAt?: string; // ISO date-time for scheduled messages
   };
 
   if (!phone && !clientId) {
@@ -23,7 +24,6 @@ export async function POST(request: Request) {
 
   const admin = getSupabaseAdminClient();
 
-  // Get clinic settings for Aios token
   const { data: clinic } = await admin
     .from('clinics')
     .select('settings')
@@ -31,10 +31,10 @@ export async function POST(request: Request) {
     .single();
 
   const settings = (clinic?.settings ?? {}) as Record<string, string>;
-  const aiosToken = settings.aiosApiKey;
+  const token = settings.flwApiToken || settings.aiosApiKey;
 
-  if (!aiosToken) {
-    return errorResponse('Aios API not configured. Go to Settings to set up.', 400);
+  if (!token) {
+    return errorResponse('FLW Chat API not configured. Go to Settings to set up.', 400);
   }
 
   // Resolve phone number
@@ -52,18 +52,58 @@ export async function POST(request: Request) {
     return errorResponse('No phone number found for client', 400);
   }
 
-  const aios = new AiosMessageService(aiosToken);
+  const flw = new FlwChatService(token);
+  const fromPhone = settings.flwFromPhone || settings.aiosFromPhone || undefined;
 
   try {
-    const result = await aios.sendWhatsApp({
+    // If scheduleAt is provided and is in the future, use scheduled messages
+    if (scheduleAt && new Date(scheduleAt) > new Date()) {
+      if (!templateId) {
+        return errorResponse('templateId is required for scheduled messages', 400);
+      }
+
+      const scheduled = await flw.createScheduledMessage({
+        to: targetPhone,
+        from: fromPhone,
+        templateId,
+        templateParams: parameters,
+        scheduling: scheduleAt,
+        hiddenSession: true,
+      });
+
+      if (clientId) {
+        await admin.from('client_messages').insert({
+          clinic_id: clinicId,
+          client_id: clientId,
+          channel: 'whatsapp',
+          status: 'pending',
+          body: `Agendado: Template ${templateId}`,
+          is_ai_generated: false,
+          external_message_id: scheduled.id,
+          scheduled_for: scheduleAt,
+          idempotency_key: `scheduled_${Date.now()}_${targetPhone}`,
+        });
+      }
+
+      return successResponse({
+        success: true,
+        messageId: scheduled.id,
+        status: scheduled.status,
+        scheduled: true,
+        scheduledFor: scheduleAt,
+      });
+    }
+
+    // Immediate send
+    const result = await flw.sendMessage({
       to: targetPhone,
+      from: fromPhone,
       text: message,
       templateId,
       parameters,
       hiddenSession: true,
     });
 
-    // Log in client_messages if clientId provided
     if (clientId) {
       await admin.from('client_messages').insert({
         clinic_id: clinicId,

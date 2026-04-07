@@ -15,6 +15,13 @@ export { SupabaseStorageService } from './services/SupabaseStorageService';
 export { UpstashEventBus } from './services/UpstashEventBus';
 export { AiosMessageService } from './services/AiosMessageService';
 export type { AiosContact, AiosSendMessageOptions, AiosUpdateContactInput, AiosUpdateTagsInput } from './services/AiosMessageService';
+export { FlwChatService } from './services/FlwChatService';
+export type {
+  FlwSendResponse, FlwContact, FlwTemplate, FlwChannel,
+  FlwScheduledMessage, FlwPaginatedResponse,
+  FlwSendMessageOptions, FlwCreateScheduledMessageInput,
+  FlwUpdateContactInput, FlwUpdateTagsInput, FlwCreateContactInput,
+} from './services/FlwChatService';
 
 // Jobs
 export { PostSessionNotificationJob } from './jobs/PostSessionNotificationJob';

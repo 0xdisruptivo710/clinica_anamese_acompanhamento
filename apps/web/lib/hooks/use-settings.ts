@@ -3,16 +3,32 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export interface ClinicSettings {
+  // Notification toggles
   postSessionMessageEnabled: boolean;
   postSessionMessageDelay: number;
   appointmentReminderEnabled: boolean;
   appointmentReminderHours: number;
   followUpReminderEnabled: boolean;
   followUpReminderDaysBefore: number;
+
+  // FLW Chat / WTS Chat API
+  flwApiToken: string;
+  flwFromPhone: string;
+
+  // Template IDs for each reminder type
+  appointmentTemplateId: string;
+  followUpTemplateId: string;
+  postSessionTemplateId: string;
+
+  // CRM sync
+  crmSyncEnabled: boolean;
+
+  // AI
+  aiEnabled: boolean;
+
+  // Legacy (backwards compat)
   aiosApiKey: string;
   aiosFromPhone: string;
-  crmSyncEnabled: boolean;
-  aiEnabled: boolean;
 }
 
 export const DEFAULT_CLINIC_SETTINGS: ClinicSettings = {
@@ -22,10 +38,15 @@ export const DEFAULT_CLINIC_SETTINGS: ClinicSettings = {
   appointmentReminderHours: 24,
   followUpReminderEnabled: false,
   followUpReminderDaysBefore: 1,
-  aiosApiKey: '',
-  aiosFromPhone: '',
+  flwApiToken: '',
+  flwFromPhone: '',
+  appointmentTemplateId: '',
+  followUpTemplateId: '',
+  postSessionTemplateId: '',
   crmSyncEnabled: false,
   aiEnabled: false,
+  aiosApiKey: '',
+  aiosFromPhone: '',
 };
 
 export interface SettingsData {
@@ -81,4 +102,63 @@ export function useUpdateSettings() {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
     },
   });
+}
+
+// ──────────────────────────────────────────────
+// Integration hooks
+// ──────────────────────────────────────────────
+
+export interface FlwTemplate {
+  id: string;
+  name: string;
+  status: string;
+  type: string;
+  body: string | null;
+}
+
+export interface FlwChannel {
+  id: string;
+  key: string;
+  platform: string;
+  displayName: string;
+}
+
+async function fetchTemplates(): Promise<{ templates: FlwTemplate[] }> {
+  const res = await fetch('/api/v1/integrations/templates');
+  if (!res.ok) return { templates: [] };
+  return res.json();
+}
+
+async function fetchChannels(): Promise<{ channels: FlwChannel[] }> {
+  const res = await fetch('/api/v1/integrations/channels');
+  if (!res.ok) return { channels: [] };
+  return res.json();
+}
+
+async function testConnection(): Promise<{ connected: boolean; channelCount?: number; channels?: Array<{ displayName: string; platform: string; key: string }>; error?: string }> {
+  const res = await fetch('/api/v1/integrations/test', { method: 'POST' });
+  if (!res.ok) return { connected: false, error: 'Request failed' };
+  return res.json();
+}
+
+export function useFlwTemplates(enabled = true) {
+  return useQuery({
+    queryKey: ['flw-templates'],
+    queryFn: fetchTemplates,
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useFlwChannels(enabled = true) {
+  return useQuery({
+    queryKey: ['flw-channels'],
+    queryFn: fetchChannels,
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useTestConnection() {
+  return useMutation({ mutationFn: testConnection });
 }
