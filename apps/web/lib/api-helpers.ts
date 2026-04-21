@@ -30,32 +30,20 @@ export async function getClinicId(): Promise<string | null> {
 }
 
 /**
- * Ensures the clinic + professional exist.
- * Returns clinicId or null if not set up yet.
+ * Retorna o clinic_id do usuário se ele estiver vinculado a um
+ * professional ativo. Retorna null caso contrário — NÃO auto-cria
+ * mais profissionais (acesso passa exclusivamente pelo convite).
  */
 export async function ensureClinicSetup(userId: string): Promise<string | null> {
-  const clinicId = await getClinicId();
-  if (!clinicId) return null;
-
-  // Ensure this user is linked as professional
   const admin = getSupabaseAdminClient();
   const { data: prof } = await admin
     .from('professionals')
-    .select('id')
+    .select('clinic_id, is_active')
     .eq('user_id', userId)
     .single();
 
-  if (!prof) {
-    // Auto-link user to the clinic
-    await admin.from('professionals').insert({
-      user_id: userId,
-      clinic_id: clinicId,
-      full_name: 'Profissional',
-      role: 'admin',
-    });
-  }
-
-  return clinicId;
+  if (!prof || !prof.is_active) return null;
+  return prof.clinic_id;
 }
 
 export function errorResponse(message: string, status: number) {

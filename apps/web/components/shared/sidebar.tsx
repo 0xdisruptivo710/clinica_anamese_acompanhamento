@@ -10,6 +10,7 @@ import {
   BarChart3,
   Settings,
   Bell,
+  UserCog,
 } from 'lucide-react';
 
 const navigation = [
@@ -18,6 +19,7 @@ const navigation = [
   { name: 'Sessoes', href: '/sessions', icon: CalendarDays },
   { name: 'Lembretes', href: '/reminders', icon: Bell },
   { name: 'Relatorios', href: '/reports', icon: BarChart3 },
+  { name: 'Equipe', href: '/team', icon: UserCog },
   { name: 'Configuracoes', href: '/settings', icon: Settings },
 ];
 

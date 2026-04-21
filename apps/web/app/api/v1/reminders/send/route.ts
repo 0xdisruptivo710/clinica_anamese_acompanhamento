@@ -1,4 +1,5 @@
-import { getAuthenticatedUser, ensureClinicSetup, errorResponse, successResponse } from '@/lib/api-helpers';
+import { errorResponse, successResponse } from '@/lib/api-helpers';
+import { requireRole } from '@/lib/auth/require-role';
 import { getSupabaseAdminClient, FlwChatService } from '@aesthetic-track/infrastructure';
 
 const PROCEDURE_LABELS: Record<string, string> = {
@@ -32,11 +33,10 @@ interface ReminderTarget {
 }
 
 export async function POST(request: Request) {
-  const user = await getAuthenticatedUser();
-  if (!user) return errorResponse('Not authenticated', 401);
+  const ctx = await requireRole(['owner', 'admin']);
+  if (!ctx) return errorResponse('Apenas admin ou dono pode disparar lembretes', 403);
 
-  const clinicId = await ensureClinicSetup(user.id);
-  if (!clinicId) return errorResponse('Clinic not set up', 404);
+  const clinicId = ctx.professional.clinicId;
 
   const body = await request.json();
   const { reminderIds, type: batchType } = body as {

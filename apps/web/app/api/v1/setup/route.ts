@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdminClient();
 
-  // Single-clinic: check if any clinic exists
+  // Se ja existe uma clinica, este endpoint nao auto-cria profissional.
+  // Acesso so via convite pelo owner/admin.
   const { data: existingClinic } = await supabase
     .from('clinics')
     .select('id')
@@ -23,36 +24,29 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (existingClinic) {
-    // Clinic exists, just ensure professional is linked
     const { data: existingProf } = await supabase
       .from('professionals')
       .select('id')
       .eq('user_id', user.id)
       .single();
 
-    if (!existingProf) {
-      await supabase.from('professionals').insert({
-        user_id: user.id,
-        clinic_id: existingClinic.id,
-        full_name: professionalName,
-        specialty: specialty || null,
-        role: 'admin',
+    if (existingProf) {
+      return successResponse({
+        clinicId: existingClinic.id,
+        message: 'Clinica ja configurada.',
       });
     }
 
-    return successResponse({
-      clinicId: existingClinic.id,
-      message: 'Clinica ja existe. Profissional vinculado.',
-    });
+    return errorResponse(
+      'Esta clinica ja foi configurada. Peca ao administrador para te convidar.',
+      403,
+    );
   }
 
-  // Create the single clinic
+  // Primeiro acesso do sistema: cria clinica + promove o usuario a OWNER.
   const { data: clinic, error: clinicError } = await supabase
     .from('clinics')
-    .insert({
-      name: clinicName,
-      email: user.email,
-    })
+    .insert({ name: clinicName, email: user.email })
     .select('id')
     .single();
 
@@ -60,16 +54,15 @@ export async function POST(request: NextRequest) {
     return errorResponse(`Erro ao criar clinica: ${clinicError?.message}`, 500);
   }
 
-  // Create professional
-  const { error: profError } = await supabase
-    .from('professionals')
-    .insert({
-      user_id: user.id,
-      clinic_id: clinic.id,
-      full_name: professionalName,
-      specialty: specialty || null,
-      role: 'admin',
-    });
+  const nowIso = new Date().toISOString();
+  const { error: profError } = await supabase.from('professionals').insert({
+    user_id: user.id,
+    clinic_id: clinic.id,
+    full_name: professionalName,
+    specialty: specialty || null,
+    role: 'owner',
+    password_set_at: nowIso, // signup direto ja define senha
+  });
 
   if (profError) {
     return errorResponse(`Erro ao criar profissional: ${profError.message}`, 500);
@@ -77,6 +70,7 @@ export async function POST(request: NextRequest) {
 
   return successResponse({
     clinicId: clinic.id,
+    role: 'owner',
     message: 'Clinica configurada com sucesso!',
   }, 201);
 }

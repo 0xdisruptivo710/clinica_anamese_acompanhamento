@@ -22,6 +22,7 @@ import {
 import Link from 'next/link';
 import { useReminders, useSendReminders } from '@/lib/hooks/use-reminders';
 import type { ReminderItem } from '@/lib/hooks/use-reminders';
+import { useProfile } from '@/lib/hooks/use-profile';
 
 const TYPE_CONFIG: Record<string, { label: string; icon: typeof Bell; color: string; bg: string }> = {
   appointment: { label: 'Lembrete', icon: CalendarClock, color: 'text-purple-600', bg: 'bg-purple-100' },
@@ -57,6 +58,8 @@ export default function RemindersPage() {
 
   const { data, isLoading, refetch, isFetching } = useReminders(filter, typeFilter || undefined);
   const sendMutation = useSendReminders();
+  const { data: profile } = useProfile();
+  const canSend = profile?.professional?.role === 'owner' || profile?.professional?.role === 'admin';
 
   const reminders = data?.reminders ?? [];
   const summary = data?.summary ?? { total: 0, overdue: 0, pending: 0, sent: 0 };
@@ -132,7 +135,7 @@ export default function RemindersPage() {
               <p className="text-2xl font-bold">{summary.overdue}</p>
               <p className="text-xs text-muted-foreground">Atrasados</p>
             </div>
-            {summary.overdue > 0 && (
+            {summary.overdue > 0 && canSend && (
               <Button
                 size="sm"
                 variant="destructive"
@@ -210,8 +213,15 @@ export default function RemindersPage() {
         </div>
       </div>
 
+      {/* Aviso para quem não pode disparar */}
+      {!canSend && profile && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Voce pode visualizar os lembretes, mas apenas administradores podem dispara-los.
+        </div>
+      )}
+
       {/* Batch Actions */}
-      {pendingReminders.length > 0 && (
+      {pendingReminders.length > 0 && canSend && (
         <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
           <Button variant="outline" size="sm" onClick={selectAllPending} className="text-xs">
             Selecionar pendentes ({pendingReminders.length})
@@ -317,6 +327,7 @@ export default function RemindersPage() {
                 sendMutation.mutate({ reminderIds: [reminder.id] })
               }
               isSending={sendMutation.isPending}
+              canSend={canSend}
             />
           ))}
         </div>
@@ -343,12 +354,14 @@ function ReminderCard({
   onToggleSelect,
   onSendSingle,
   isSending,
+  canSend,
 }: {
   reminder: ReminderItem;
   isSelected: boolean;
   onToggleSelect: () => void;
   onSendSingle: () => void;
   isSending: boolean;
+  canSend: boolean;
 }) {
   const typeCfg = TYPE_CONFIG[reminder.type] ?? TYPE_CONFIG.appointment;
   const statusCfg = STATUS_CONFIG[reminder.status] ?? STATUS_CONFIG.pending;
@@ -429,7 +442,7 @@ function ReminderCard({
             </Button>
           </Link>
 
-          {reminder.status !== 'sent' && (
+          {reminder.status !== 'sent' && canSend && (
             <Button
               size="sm"
               variant={reminder.status === 'overdue' ? 'destructive' : 'default'}
